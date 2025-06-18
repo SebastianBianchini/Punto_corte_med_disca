@@ -1,0 +1,429 @@
+---
+title: "Untitled"
+author: "Sebastian Bianchini"
+date: '2025-06-05'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Librerias
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(janitor)
+library(tidyr)
+options(scipen=999)
+funserver <- Sys.getenv("RFUN_PATH")
+source(paste0(funserver,"/my_sqlQuery_encoding.R"))
+```
+
+
+
+```{r}
+#Directorio
+# setwd("Z:/DATA MINING/desarrollo/seba/55-Punto_corte_med_disca")
+setwd("C:/Users/mt33259945/Mi unidad/Trabajo/55-Punto_corte_med_disca")
+```
+
+```{r}
+# Importe 
+# data <- read_excel("data/BASE_CONSUMOS_COBERTURA_100.xlsx")
+# save(data, file="data/BASE_CONSUMOS_COBERTURA_100.Rdata")
+load(file="data/BASE_CONSUMOS_COBERTURA_100.Rdata")
+head(data)
+```
+
+```{r}
+ summary(data)
+```
+```{r}
+ data %>% filter(is.na(DCOD_MEDICAMENTO)) %>%  View()
+```
+ 
+ 
+```{r}
+
+# Limpio nombres de variables y luego los paso a mayuscula
+data <- clean_names(data)
+names(data) <- toupper(names(data))
+
+
+```
+ Para el analisis y comparacion de precios solo considero aquellos medicamentos con precio MAC
+ Creo la variable MAC SI/NO (1/0) para dimensionar
+
+```{r}
+data<- data %>% mutate(VALOR_DROGUERIA_MENOR = if_else(ESTA_EN_MAC == "NO EN MAC",0, 
+                                                       as.numeric(ESTA_EN_MAC)
+                                                      ),
+                      ESTA_EN_MAC = if_else(ESTA_EN_MAC == "NO EN MAC", as.numeric(0), as.numeric(1)
+                                            )
+                      )
+
+
+
+```
+```{r}
+
+```
+
+
+Dimension en Cantidad (transacciones / medicamentos)
+
+```{r}
+# cantidad de transacciones(combinacion Farmacia-medicamento-IC-AñoMes)
+tabyl(data$ESTA_EN_MAC)
+
+
+print(paste0("Cantidad de Medicamentos en la base ",length(unique(data$CODIGO_DEFINITIVO)))
+      )
+
+
+# Agrupo por Dcod y varaible MAC, tomando el años mes maximo para ver porcentaje de medicantos unicos 
+# podemos comparar con MAC
+data %>%  group_by(CODIGO_DEFINITIVO, ESTA_EN_MAC) %>%  
+          summarise(ANO_MES_PRESTACION_MAX = max(DNUM_ANOMES_PRESTACION)
+                    ) %>% 
+          tabyl(ESTA_EN_MAC) 
+```
+ 
+Base inflacion 
+```{r}
+sql_qry <- paste0("SELECT [ANOMES]
+      ,[INFL_MDM_OSDE_PROM]
+      ,[INFL_MDM_CANASTA]
+      ,[INFL_MDM_ALTO_COSTO]
+  FROM [DBPresupuestos].[dbo].[INDICADORES]
+  WHERE ANOMES between 202401 and 202412
+  order by [ANOMES]")
+
+data_inflacion <- my_sqlQuery_encoding(2, qry = sql_qry)
+ # save(data_inflacion, file="data/data_inflacion.Rdata")
+```
+
+
+Calculo de infalcion acumulada 
+```{r}
+# 
+# # Definir periodo de acumulación
+# inicio <- 202401
+# fin <- 202412
+# 
+# # Ordenar por ANOMES
+# df_inflacion <- data_inflacion[order(data_inflacion$ANOMES), ]
+# 
+# # Filtrar los ANOMES dentro del rango deseado
+# df_inflacion$EN_RANGO <- df_inflacion$ANOMES >= inicio & df_inflacion$ANOMES <= fin
+# 
+# # Crear acumulados por columna
+# acumulado_por_columna <- function(var) {
+#   # Inicializar la columna de acumulado con NA
+#   acumulado <- rep(NA, nrow(df_inflacion))
+#   
+#   # Solo trabajar dentro del rango
+#   idx <- which(df_inflacion$EN_RANGO)
+#   
+#   if (length(idx) > 0) {
+#     factores <- 1 + df_inflacion[[var]][idx]
+#     acumulados <- cumprod(factores)
+#     acumulado[idx] <- acumulados - 1
+#   }
+#   
+#   return(acumulado)
+# }
+# 
+# # Aplicar para cada una de las columnas
+# df_inflacion$ACUM_MDM_OSDE_PROM <- acumulado_por_columna("INFL_MDM_OSDE_PROM")
+# df_inflacion$ACUM_MDM_CANASTA <- acumulado_por_columna("INFL_MDM_CANASTA")
+# df_inflacion$ACUM_MDM_ALTO_COSTO <- acumulado_por_columna("INFL_MDM_ALTO_COSTO")
+# 
+# #eliminar la columna auxiliar
+# df_inflacion$EN_RANGO <- NULL
+# 
+# # Ver resultado
+# head(df_inflacion)
+
+# Definir periodo
+inicio <- 202401
+fin <- 202412
+
+# Ordenar el dataframe por ANOMES ascendente
+df_inflacion <- data_inflacion[order(data_inflacion$ANOMES), ]
+
+# Función para calcular el índice hacia diciembre
+indice_hacia_diciembre <- function(var) {
+  n <- nrow(df_inflacion)
+  indices <- rep(NA, n)
+  
+  for (i in 1:n) {
+    anomes_actual <- df_inflacion$ANOMES[i]
+    
+    # Solo calcular si el mes está antes o igual que diciembre
+    if (anomes_actual <= fin) {
+      # Subset desde el mes actual hasta diciembre
+      idx_rango <- which(df_inflacion$ANOMES >= anomes_actual & df_inflacion$ANOMES <= fin)
+      factores <- 1 + df_inflacion[[var]][idx_rango]
+      indices[i] <- prod(factores)
+    }
+  }
+  
+  return(indices)
+}
+
+# Aplicar la función para cada índice que te interese
+df_inflacion$INDICE_PROM_HACIA_DIC <- indice_hacia_diciembre("INFL_MDM_OSDE_PROM")
+df_inflacion$INDICE_CANASTA_HACIA_DIC <- indice_hacia_diciembre("INFL_MDM_CANASTA")
+df_inflacion$INDICE_ALTO_COSTO_HACIA_DIC <- indice_hacia_diciembre("INFL_MDM_ALTO_COSTO")
+
+# Ver resultado
+head(df_inflacion)
+
+
+
+```
+Asigno canasta y periodo segun corresponda 
+```{r}
+df_med <- data %>%  left_join(df_inflacion %>%  select(ANOMES, INDICE_PROM_HACIA_DIC, 
+                                                       INDICE_CANASTA_HACIA_DIC, INDICE_ALTO_COSTO_HACIA_DIC), 
+                              by=  join_by(DNUM_ANOMES_PRESTACION == ANOMES) 
+                              ) %>% 
+                    mutate(INDICE_ACT_INF=ifelse( ESTA_EN_MAC== 1, INDICE_ALTO_COSTO_HACIA_DIC, 
+                                                  INDICE_PROM_HACIA_DIC),
+                           NUM_IMPORTE_PAGO_OSDE_ACT= NUM_IMPORTE_PAGO_OSDE * INDICE_ACT_INF,
+                           PVP_ACT= PVP * INDICE_ACT_INF,
+                           IMPORTE_DESCUENTO_CONVENIO_ACT= IMPORTE_DESCUENTO_CONVENIO * INDICE_ACT_INF,
+                           IMPORTE_DESCUENTO_INDUSTRIA_ACT =IMPORTE_DESCUENTO_INDUSTRIA * INDICE_ACT_INF,
+                           COSTO_POR_FARMACIA_UNITARIO_ACT = COSTO_POR_FARMACIA_UNITARIO * INDICE_ACT_INF,
+                           VALOR_DROGUERIA_MENOR_ACT = VALOR_DROGUERIA_MENOR * INDICE_ACT_INF,
+                           NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT = NUM_IMPORTE_PAGO_OSDE_ACT/ NUM_CANTIDAD)
+
+
+```
+
+Dimension en Importe$
+```{r}
+
+# Agrupo por Dcod y varaible MAC, tomando el años mes maximo para ver porcentaje de medicantos unicos 
+# podemos comparar con MAC
+Impor_total_orden <- sum(df_med$NUM_IMPORTE_PAGO_OSDE_ACT)
+df_med %>%  group_by(ESTA_EN_MAC) %>%  
+          summarise(
+                    IMPORTE = sum(NUM_IMPORTE_PAGO_OSDE_ACT),
+                    PART= IMPORTE/Impor_total_orden
+                    ) 
+
+```
+
+```{r}
+sql_qry <-  paste0("SELECT [DID_MEDICAMENTO]
+      ,[VIGENCIA]
+      ,[PRECIO]
+  FROM [DWDATAMART].[dbo].[DMEDICAMENTO_PRECIOS]
+  WHERE DID_MEDICAMENTO = 22417 -- DDES_MEDICAMENTO	DDES_PRESENTACION - ZYVOX ORAL	600 MG TAB.X 10
+  and VIGENCIA = 20241231 ")
+
+
+zyvox_precio <- my_sqlQuery_encoding(2, qry = sql_qry)
+
+corte_zyvox <- zyvox_precio$PRECIO *2
+
+```
+
+
+
+```{r}
+quantile(df_med$NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT, probs=c(0,0.9,0.95,0.96,0.97,0.98,0.99,1))
+
+corte_percentil <- quantile(df_med$NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT, probs=c(0.98))
+
+corte_percentil[[1]]
+```
+Disstrubucio de precios Importe pagado OSDE
+```{r}
+
+
+
+
+
+#  histograma
+df_med %>%
+  filter(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT > 0 & NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT < corte_percentil[[1]]) %>%
+  ggplot(aes(x = NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT)) +
+  geom_histogram(binwidth = 1000, fill = "steelblue", alpha = 0.8) +
+  facet_wrap(~ ESTA_EN_MAC, scales = "free_y") +  # ← CAMBIO AQUÍ
+  labs(
+    title = "Distribución de Importes de Pago OSDE (P.unit.)- hasta Percentil 98",
+    x = "Importe de Pago",
+    y = "Frecuencia"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(face = "bold"),
+    plot.title = element_text(hjust = 0.5)
+  )
+
+
+
+
+
+df_med %>%  filter(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT>0&NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT<corte_percentil[[1]])%>% 
+      ggplot( aes(x = as.character(ESTA_EN_MAC),y = NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT)) +
+  geom_boxplot( alpha = 0.7) +
+  labs(
+    title = "Boxplot de Importe de Pago OSDE (P.unit.) según ESTA_EN_MAC - hta Percentil 98",
+    x = "Está en MAC",
+    y = "Importe de Pago OSDE"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5)
+  )
+
+
+#### Percentil > 99
+df_med %>%
+  filter(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT > corte_percentil[[1]]) %>%
+  ggplot(aes(x = NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT)) +
+  geom_histogram(binwidth = 20000, fill = "steelblue", alpha = 0.8) +
+  geom_vline(xintercept = corte_zyvox, color = "red", linetype = "dashed", size = 1) +
+  facet_wrap(~ ESTA_EN_MAC, scales = "free") +
+  labs(
+    title = "Distribución de Importes de Pago OSDE (P.unit.) - > Percentil 98",
+    x = "Importe de Pago",
+    y = "Frecuencia"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(face = "bold"),
+    plot.title = element_text(hjust = 0.5)
+  )
+
+
+df_med %>%
+  filter(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT > corte_percentil[[1]]) %>%
+  ggplot(aes(x = as.character(ESTA_EN_MAC), y = NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT)) +
+  geom_boxplot(alpha = 0.7) +
+  geom_hline(yintercept = corte_zyvox, color = "red", linetype = "dashed", size = 1) +
+  labs(
+    title = "Boxplot de Importe de Pago OSDE (P.unit.) según ESTA_EN_MAC - > Percentil 98",
+    x = "Está en MAC",
+    y = "Importe de Pago OSDE"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5)
+  )
+
+```
+
+```{r}
+df_long <- df_med %>% filter(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT>0 & ESTA_EN_MAC == 1) %>% 
+  pivot_longer(cols = c(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT, VALOR_DROGUERIA_MENOR_ACT),
+               names_to = "canal",
+               values_to = "precio")
+
+
+
+ggplot(df_long, aes(x = canal, y = precio, fill = canal)) +
+  geom_boxplot(alpha = 0.7) +
+  labs(
+    title = "Comparación de precios por canal - hta $250.000",
+    x = "Canal",
+    y = "Precio"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")+
+  ylim(c(0,250000))
+  
+
+
+
+```
+
+
+
+Comparacion  Medicamento Farracia VS MAC. Considero el manor valor de medicamento segun codigo ( hay distintos valores entre famarcias para un mismo codigo)
+
+```{r}
+
+# RNK DE Medicamentos s/ codigo ( cantidad)
+df_med %>% filter(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT>0 & ESTA_EN_MAC == 1)  %>% 
+                          group_by(CODIGO_DEFINITIVO) %>% 
+                          summarise(CANT = sum(NUM_CANTIDAD)) %>% arrange(-CANT)
+
+
+#####
+df_long <- df_med %>% filter(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT>0 &  ESTA_EN_MAC == 1) %>% 
+                      group_by(CODIGO_DEFINITIVO) %>% 
+                      summarise(IMPORTE_PAGO_OSDE_UNITARIO_ACT_MED = median(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT),
+                                            VALOR_DROGUERIA_MENOR_ACT = median(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT),
+                                            DIFERENCIA_IMPORTE= IMPORTE_PAGO_OSDE_UNITARIO_ACT_MAX -
+                                                                VALOR_DROGUERIA_MENOR_ACT) %>% 
+                                  arrange(-DIFERENCIA_IMPORTE)%>% slice_head(n=10)  %>% 
+        pivot_longer(cols = c(IMPORTE_PAGO_OSDE_UNITARIO_ACT_MAX, VALOR_DROGUERIA_MENOR_ACT), names_to = "tipo", values_to = "precio") 
+
+
+ggplot(df_long, aes(x = as.character(CODIGO_DEFINITIVO), y = precio, fill = tipo)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Comparación de precios por producto",
+    x = "CODIGO",
+    y = "Precio"
+  ) +
+  coord_flip()+
+  theme_minimal()
+  
+  
+
+
+
+```
+
+```{r}
+
+
+
+```
+
+
+# 
+
+```{r}
+ nn<-  df_med %>% filter(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT>0 &  ESTA_EN_MAC == 1) %>% group_by(CODIGO_DEFINITIVO) %>% 
+                                  summarise(IMPORTE_PAGO_OSDE_UNITARIO_ACT_MAX = max(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT),
+                                            VALOR_DROGUERIA_MENOR_ACT = min(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT),
+                                            DIFERENCIA_IMPORTE= IMPORTE_PAGO_OSDE_UNITARIO_ACT_MAX -
+                                                                VALOR_DROGUERIA_MENOR_ACT,
+                                            CANAL_CONVENIENTE =ifelse(DIFERENCIA_IMPORTE >0, "DROGUERIA",
+                                                                      "FARMACIA")) %>% 
+                                  arrange(-DIFERENCIA_IMPORTE)
+
+```
+
+
+```{r}
+
+library(rpart)
+
+modelo <- rpart(CANAL_CONVENIENTE ~ IMPORTE_PAGO_OSDE_UNITARIO_ACT_MAX, data = nn, method = "class")
+plot(modelo)
+text(modelo)
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
