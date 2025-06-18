@@ -26,22 +26,25 @@ source(paste0(funserver,"/my_sqlQuery_encoding.R"))
 ```{r}
 #Directorio
 # setwd("Z:/DATA MINING/desarrollo/seba/55-Punto_corte_med_disca")
-setwd("C:/Users/mt33259945/Mi unidad/Trabajo/55-Punto_corte_med_disca")
+# setwd("C:/Users/mt33259945/Mi unidad/Trabajo/55-Punto_corte_med_disca")
 ```
 
 ```{r}
 # Importe 
 # data <- read_excel("data/BASE_CONSUMOS_COBERTURA_100.xlsx")
 # save(data, file="data/BASE_CONSUMOS_COBERTURA_100.Rdata")
-load(file="data/BASE_CONSUMOS_COBERTURA_100.Rdata")
+load(file="C:/Users/mt33259945/Mi unidad/Trabajo/55-Punto_corte_med_disca/data/BASE_CONSUMOS_COBERTURA_100.Rdata")
 head(data)
 ```
 
 ```{r}
  summary(data)
 ```
+El 0.2% de las ordenes tienen valores de NUM CANTIDAD <= 0 por lo q los excluyo del analisis 
 ```{r}
- data %>% filter(is.na(DCOD_MEDICAMENTO)) %>%  View()
+ # data %>% filter(is.na(DCOD_MEDICAMENTO)) %>%  View()
+count(df_med)
+table(df_med$NUM_CANTIDAD[df_med$NUM_CANTIDAD<1])
 ```
  
  
@@ -109,43 +112,6 @@ data_inflacion <- my_sqlQuery_encoding(2, qry = sql_qry)
 Calculo de infalcion acumulada 
 ```{r}
 # 
-# # Definir periodo de acumulación
-# inicio <- 202401
-# fin <- 202412
-# 
-# # Ordenar por ANOMES
-# df_inflacion <- data_inflacion[order(data_inflacion$ANOMES), ]
-# 
-# # Filtrar los ANOMES dentro del rango deseado
-# df_inflacion$EN_RANGO <- df_inflacion$ANOMES >= inicio & df_inflacion$ANOMES <= fin
-# 
-# # Crear acumulados por columna
-# acumulado_por_columna <- function(var) {
-#   # Inicializar la columna de acumulado con NA
-#   acumulado <- rep(NA, nrow(df_inflacion))
-#   
-#   # Solo trabajar dentro del rango
-#   idx <- which(df_inflacion$EN_RANGO)
-#   
-#   if (length(idx) > 0) {
-#     factores <- 1 + df_inflacion[[var]][idx]
-#     acumulados <- cumprod(factores)
-#     acumulado[idx] <- acumulados - 1
-#   }
-#   
-#   return(acumulado)
-# }
-# 
-# # Aplicar para cada una de las columnas
-# df_inflacion$ACUM_MDM_OSDE_PROM <- acumulado_por_columna("INFL_MDM_OSDE_PROM")
-# df_inflacion$ACUM_MDM_CANASTA <- acumulado_por_columna("INFL_MDM_CANASTA")
-# df_inflacion$ACUM_MDM_ALTO_COSTO <- acumulado_por_columna("INFL_MDM_ALTO_COSTO")
-# 
-# #eliminar la columna auxiliar
-# df_inflacion$EN_RANGO <- NULL
-# 
-# # Ver resultado
-# head(df_inflacion)
 
 # Definir periodo
 inicio <- 202401
@@ -185,10 +151,13 @@ head(df_inflacion)
 
 
 ```
-Asigno canasta y periodo segun corresponda 
+Asigno canasta ( alto costos = [INFL_MDM_ALTO_COSTO], demas medicamentos = [INFL_MDM_OSDE_PROM])
+y periodo segun corresponda 
 ```{r}
-df_med <- data %>%  left_join(df_inflacion %>%  select(ANOMES, INDICE_PROM_HACIA_DIC, 
-                                                       INDICE_CANASTA_HACIA_DIC, INDICE_ALTO_COSTO_HACIA_DIC), 
+df_med <- data %>%  filter  (NUM_CANTIDAD  >0) %>% # excluyo cantidades menores a 1
+                left_join(df_inflacion %>%  select(ANOMES, INDICE_PROM_HACIA_DIC, 
+                                                       INDICE_CANASTA_HACIA_DIC,
+                                                   INDICE_ALTO_COSTO_HACIA_DIC), 
                               by=  join_by(DNUM_ANOMES_PRESTACION == ANOMES) 
                               ) %>% 
                     mutate(INDICE_ACT_INF=ifelse( ESTA_EN_MAC== 1, INDICE_ALTO_COSTO_HACIA_DIC, 
@@ -204,7 +173,7 @@ df_med <- data %>%  left_join(df_inflacion %>%  select(ANOMES, INDICE_PROM_HACIA
 
 ```
 
-Dimension en Importe$
+Dimension en Importe $
 ```{r}
 
 # Agrupo por Dcod y varaible MAC, tomando el años mes maximo para ver porcentaje de medicantos unicos 
@@ -359,7 +328,7 @@ df_med %>% filter(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT>0 & ESTA_EN_MAC == 1)  %>%
 #####
 df_long <- df_med %>% filter(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT>0 &  ESTA_EN_MAC == 1) %>% 
                       group_by(CODIGO_DEFINITIVO) %>% 
-                      summarise(IMPORTE_PAGO_OSDE_UNITARIO_ACT_MED = median(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT),
+                      summarise(IMPORTE_PAGO_OSDE_UNITARIO_ACT_MED =  median(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT),
                                             VALOR_DROGUERIA_MENOR_ACT = median(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT),
                                             DIFERENCIA_IMPORTE= IMPORTE_PAGO_OSDE_UNITARIO_ACT_MAX -
                                                                 VALOR_DROGUERIA_MENOR_ACT) %>% 
@@ -393,34 +362,28 @@ ggplot(df_long, aes(x = as.character(CODIGO_DEFINITIVO), y = precio, fill = tipo
 # 
 
 ```{r}
- nn<-  df_med %>% filter(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT>0 &  ESTA_EN_MAC == 1) %>% group_by(CODIGO_DEFINITIVO) %>% 
-                                  summarise(IMPORTE_PAGO_OSDE_UNITARIO_ACT_MAX = max(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT),
-                                            VALOR_DROGUERIA_MENOR_ACT = min(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT),
-                                            DIFERENCIA_IMPORTE= IMPORTE_PAGO_OSDE_UNITARIO_ACT_MAX -
-                                                                VALOR_DROGUERIA_MENOR_ACT,
-                                            CANAL_CONVENIENTE =ifelse(DIFERENCIA_IMPORTE >0, "DROGUERIA",
-                                                                      "FARMACIA")) %>% 
-                                  arrange(-DIFERENCIA_IMPORTE)
+ # nn<-  df_med %>% filter(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT>0 &  ESTA_EN_MAC == 1) %>% group_by(CODIGO_DEFINITIVO) %>%
+ #                                  summarise(IMPORTE_PAGO_OSDE_UNITARIO_ACT_MAX = max(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT),
+ #                                            VALOR_DROGUERIA_MENOR_ACT = min(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT),
+ #                                            DIFERENCIA_IMPORTE= IMPORTE_PAGO_OSDE_UNITARIO_ACT_MAX -
+ #                                                                VALOR_DROGUERIA_MENOR_ACT,
+ #                                            CANAL_CONVENIENTE =ifelse(DIFERENCIA_IMPORTE >0, "DROGUERIA",
+ #                                                                      "FARMACIA")) %>%
+ #                                  arrange(-DIFERENCIA_IMPORTE)
 
 ```
 
 
 ```{r}
 
-library(rpart)
-
-modelo <- rpart(CANAL_CONVENIENTE ~ IMPORTE_PAGO_OSDE_UNITARIO_ACT_MAX, data = nn, method = "class")
-plot(modelo)
-text(modelo)
+# library(rpart)
+# 
+# modelo <- rpart(CANAL_CONVENIENTE ~ IMPORTE_PAGO_OSDE_UNITARIO_ACT_MAX, data = nn, method = "class")
+# plot(modelo)
+# text(modelo)
 ```
 
-
-```{r}
-```
-
-
-```{r}
-```
+ 
 
 
 ```{r}
