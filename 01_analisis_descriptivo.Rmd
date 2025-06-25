@@ -17,6 +17,7 @@ library(ggplot2)
 library(janitor)
 library(tidyr)
 library(lubridate)
+library(plotly)
 
 options(scipen=999)
 funserver <- Sys.getenv("RFUN_PATH")
@@ -485,7 +486,177 @@ datos_ultimo_mes %>%   mutate(DIFERENCIA_IMPORTE_TOTAL =DIFERENCIA_IMPORTE_UNIT 
 ```
 
 
+```{r}
+# Calcular todos los deciles
+deciles <- quantile(datos_ultimo_mes$NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT, 
+                   probs = seq(0.1, 0.9, 0.1), na.rm = TRUE)
+
+# Crear dataframe con información de deciles para el gráfico
+deciles_df <- data.frame(
+  decil = paste0("D", 1:9),
+  valor = as.numeric(deciles),
+  percentil = seq(10, 90, 10)
+)
+
+# Asignar decil a cada observación
+datos_ultimo_mes <- datos_ultimo_mes %>%
+  mutate(
+    DECIL = case_when(
+      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= deciles[1] ~ "D1",
+      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= deciles[2] ~ "D2",
+      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= deciles[3] ~ "D3",
+      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= deciles[4] ~ "D4",
+      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= deciles[5] ~ "D5",
+      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= deciles[6] ~ "D6",
+      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= deciles[7] ~ "D7",
+      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= deciles[8] ~ "D8",
+      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= deciles[9] ~ "D9",
+      TRUE ~ "D10"
+    )
+  )
 
 
 
+datos_ultimo_mes %>%   mutate(DIFERENCIA_IMPORTE_TOTAL =DIFERENCIA_IMPORTE_UNIT * NUM_CANTIDAD) %>%
+                      group_by(DECIL,CANAL_CONVENIENTE) %>% 
+                      summarise(CANTIDAD_ORDENES=n(), 
+                                CANT_MED = sum(NUM_CANTIDAD),
+                                SUM_DIFERENCIA_IMPORTE_TOTAL = abs(round(sum(DIFERENCIA_IMPORTE_TOTAL), 0))
+                                ) %>%  arrange(DECIL,SUM_DIFERENCIA_IMPORTE_TOTAL,CANAL_CONVENIENTE ) %>%  View()
+
+
+
+
+
+
+resumen_deciles <- datos_ultimo_mes %>%
+  mutate(DIFERENCIA_IMPORTE_TOTAL = DIFERENCIA_IMPORTE_UNIT * NUM_CANTIDAD) %>%
+  group_by(DECIL, CANAL_CONVENIENTE) %>%
+  summarise(
+    CANTIDAD_ORDENES = n(),
+    CANT_MED = sum(NUM_CANTIDAD),
+    SUM_DIFERENCIA_IMPORTE_TOTAL = abs(round(sum(DIFERENCIA_IMPORTE_TOTAL), 0)),
+    .groups = "drop"
+  )
+
+
+resumen_deciles$DECIL <- factor(resumen_deciles$DECIL, levels = paste0("D", 1:10))
+
+ggplot(resumen_deciles, aes(x = SUM_DIFERENCIA_IMPORTE_TOTAL, 
+                             y = DECIL, 
+                             fill = CANAL_CONVENIENTE)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Diferencia Total de Importe por Decil y Canal Conveniente",
+    x = "Diferencia Total de Importe ($)",
+    y = "Decil",
+    fill = "Canal"
+  ) +
+  scale_x_continuous(labels = scales::label_dollar(prefix = "$", big.mark = ".", decimal.mark = ",")) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    legend.title = element_text(face = "bold")
+  )
+
+```
+
+
+ Grafico  Scatter plot
  
+```{r}
+
+# Cargar librerías necesarias
+
+library(scales)
+
+# Preparar datos ordenados de menor a mayor
+datos_scatter <- datos_ultimo_mes %>%
+  arrange(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT) %>%
+  mutate(
+    ORDEN = row_number(),  # Crear índice ordenado para eje X
+    CANAL_CONVENIENTE = factor(CANAL_CONVENIENTE, 
+                              levels = c("FARMACIA", "DROGUERIA"))
+  )
+
+# Calcular percentil 96
+percentil_96 <- deciles[6]
+# Calcular percentil 98
+percentil_98 <- deciles[8]
+
+# Crear scatter plot
+grafico_scatter_ordenado <- datos_scatter %>%
+  filter(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT>=percentil_96) %>% 
+  ggplot(aes(x = ORDEN, 
+             y = NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT, 
+             color = CANAL_CONVENIENTE)) +
+  
+  # Puntos del scatter
+  geom_point(alpha = 0.7, size = 1.2) +
+  
+  # Línea horizontal del percentil 75
+  geom_hline(yintercept = percentil_98,
+             color = "grey",
+             linetype = "dashed",
+             size = 1) +
+
+  # Anotación del percentil
+  annotate("text",
+           x = max(datos_scatter$ORDEN) * 0.05,
+           y = percentil_75 * 1.05,
+           label = paste0("Percentil 60: $",
+                         format(round(percentil_98, 2),
+                               big.mark = ",",
+                               decimal.mark = ".")),
+           color = "grey",
+           size = 4,
+           hjust = 0) +
+
+  # Escalas y colores
+  scale_y_continuous(
+    labels = dollar_format(prefix = "$", suffix = ""),
+    name = "Precio Farmacia (NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT)"
+  ) +
+  
+  scale_x_continuous(
+    name = "Orden (de menor a mayor precio)",
+    labels = comma_format()
+  ) +
+  
+  scale_color_manual(
+    values = c("FARMACIA" = "#dc3545", "DROGUERIA" = "#28a745"),
+    name = "Canal Más\nConveniente"
+  ) +
+  
+  # Tema y títulos
+  labs(
+    title = "Distribución Ordenada de Precios de Farmacia por Canal Conveniente",
+    subtitle = paste0("Análisis de ", format(nrow(datos_scatter), big.mark = ","), 
+                     " medicamentos del último decil"),
+    caption = "Los puntos están ordenados de menor a mayor precio"
+  ) +
+  
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 11),
+    legend.position = "bottom",
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 9),
+    panel.grid.minor = element_blank()
+    ) +
+  xlim(c(2000,max(datos_scatter$ORDEN)
+         )
+       )
+
+# Mostrar el gráfico
+print(grafico_scatter_ordenado)
+
+
+
+
+```
