@@ -17,7 +17,7 @@ library(ggplot2)
 library(janitor)
 library(tidyr)
 library(lubridate)
-library(plotly)
+# library(plotly)
 
 options(scipen=999)
 funserver <- Sys.getenv("RFUN_PATH")
@@ -47,8 +47,8 @@ head(data)
 El 0.2% de las ordenes tienen valores de NUM CANTIDAD <= 0 por lo q los excluyo del analisis 
 ```{r}
  # data %>% filter(is.na(DCOD_MEDICAMENTO)) %>%  View()
-count(df_med)
-table(df_med$NUM_CANTIDAD[df_med$NUM_CANTIDAD<1])
+count(data)
+table(data$NUM_CANTIDAD[data$NUM_CANTIDAD<1])
 ```
  
  
@@ -321,42 +321,7 @@ ggplot(df_long, aes(x = canal, y = precio, fill = canal)) +
 
 
 
-Comparacion  Medicamento Farmacia VS MAC. Considero el manor valor de medicamento segun codigo ( hay distintos valores entre famarcias para un mismo codigo)
 
-```{r}
-# 
-# # RNK DE Medicamentos s/ codigo ( cantidad)
-# df_med %>% filter(ESTA_EN_MAC == 1)  %>% 
-#                           group_by(CODIGO_DEFINITIVO) %>% 
-#                           summarise(CANT = sum(NUM_CANTIDAD)) %>% arrange(-CANT)
-# 
-# 
-# #####
-# df_long <- df_med %>% filter(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT>0 &  ESTA_EN_MAC == 1) %>% 
-#                       group_by(CODIGO_DEFINITIVO) %>% 
-#                       summarise(IMPORTE_PAGO_OSDE_UNITARIO_ACT_MED =  median(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT),
-#                                             VALOR_DROGUERIA_MENOR_ACT = median(VALOR_DROGUERIA_MENOR_ACT),
-#                                             DIFERENCIA_IMPORTE= IMPORTE_PAGO_OSDE_UNITARIO_ACT_MAX -
-#                                                                 VALOR_DROGUERIA_MENOR_ACT) %>% 
-#                                   arrange(-DIFERENCIA_IMPORTE)%>% slice_head(n=10)  %>% 
-#         pivot_longer(cols = c(IMPORTE_PAGO_OSDE_UNITARIO_ACT_MAX, VALOR_DROGUERIA_MENOR_ACT), names_to = "tipo", values_to = "precio") 
-# 
-# 
-# ggplot(df_long, aes(x = as.character(CODIGO_DEFINITIVO), y = precio, fill = tipo)) +
-#   geom_col(position = "dodge") +
-#   labs(
-#     title = "Comparación de precios por producto",
-#     x = "CODIGO",
-#     y = "Precio"
-#   ) +
-#   coord_flip()+
-#   theme_minimal()
-  
-  
-
-
-
-```
 
 
 
@@ -488,50 +453,51 @@ datos_ultimo_mes %>%   mutate(DIFERENCIA_IMPORTE_TOTAL =DIFERENCIA_IMPORTE_UNIT 
 
 ```{r}
 # Calcular todos los deciles
-deciles <- quantile(datos_ultimo_mes$NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT, 
-                   probs = seq(0.1, 0.9, 0.1), na.rm = TRUE)
+percentiles <- quantile(df_med$NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT, 
+                   probs = seq(0.91,1, 0.01), na.rm = TRUE)
 
-# Crear dataframe con información de deciles para el gráfico
-deciles_df <- data.frame(
-  decil = paste0("D", 1:9),
-  valor = as.numeric(deciles),
-  percentil = seq(10, 90, 10)
-)
+# # Crear dataframe con información de deciles para el gráfico
+# deciles_df <- data.frame(
+#   decil = paste0("P", 91:100) ,
+#   valor = as.numeric(percentiles) ,
+#   percentil = seq(91, 100, 1)
+# )
 
 # Asignar decil a cada observación
 datos_ultimo_mes <- datos_ultimo_mes %>%
   mutate(
-    DECIL = case_when(
-      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= deciles[1] ~ "D1",
-      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= deciles[2] ~ "D2",
-      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= deciles[3] ~ "D3",
-      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= deciles[4] ~ "D4",
-      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= deciles[5] ~ "D5",
-      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= deciles[6] ~ "D6",
-      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= deciles[7] ~ "D7",
-      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= deciles[8] ~ "D8",
-      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= deciles[9] ~ "D9",
-      TRUE ~ "D10"
+    PERCENTIL = case_when(
+      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= percentiles[1] ~ "P91",
+      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= percentiles[2] ~ "P92",
+      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= percentiles[3] ~ "P93",
+      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= percentiles[4] ~ "P94",
+      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= percentiles[5] ~ "P95",
+      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= percentiles[6] ~ "P96",
+      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= percentiles[7] ~ "P97",
+      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= percentiles[8] ~ "P98",
+      NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT <= percentiles[9] ~ "P99",
+      TRUE ~ "P100"
     )
   )
 
 
 
 datos_ultimo_mes %>%   mutate(DIFERENCIA_IMPORTE_TOTAL =DIFERENCIA_IMPORTE_UNIT * NUM_CANTIDAD) %>%
-                      group_by(DECIL,CANAL_CONVENIENTE) %>% 
+                      group_by(PERCENTIL,CANAL_CONVENIENTE) %>% 
                       summarise(CANTIDAD_ORDENES=n(), 
                                 CANT_MED = sum(NUM_CANTIDAD),
                                 SUM_DIFERENCIA_IMPORTE_TOTAL = abs(round(sum(DIFERENCIA_IMPORTE_TOTAL), 0))
-                                ) %>%  arrange(DECIL,SUM_DIFERENCIA_IMPORTE_TOTAL,CANAL_CONVENIENTE ) %>%  View()
+                                 )  
+                                # arrange(PERCENTIL,SUM_DIFERENCIA_IMPORTE_TOTAL,CANAL_CONVENIENTE ) %>%  View()
 
 
 
 
 
 
-resumen_deciles <- datos_ultimo_mes %>%
+resumen_percentiles <- datos_ultimo_mes %>%
   mutate(DIFERENCIA_IMPORTE_TOTAL = DIFERENCIA_IMPORTE_UNIT * NUM_CANTIDAD) %>%
-  group_by(DECIL, CANAL_CONVENIENTE) %>%
+  group_by(PERCENTIL, CANAL_CONVENIENTE) %>%
   summarise(
     CANTIDAD_ORDENES = n(),
     CANT_MED = sum(NUM_CANTIDAD),
@@ -540,16 +506,17 @@ resumen_deciles <- datos_ultimo_mes %>%
   )
 
 
-resumen_deciles$DECIL <- factor(resumen_deciles$DECIL, levels = paste0("D", 1:10))
+resumen_percentiles$PERCENTIL <- factor(resumen_percentiles$PERCENTIL, levels = paste0("P", 91:100)
+                                        )
 
-ggplot(resumen_deciles, aes(x = SUM_DIFERENCIA_IMPORTE_TOTAL, 
-                             y = DECIL, 
+ggplot(resumen_percentiles, aes(x = SUM_DIFERENCIA_IMPORTE_TOTAL, 
+                             y = PERCENTIL, 
                              fill = CANAL_CONVENIENTE)) +
   geom_col(position = "dodge") +
   labs(
-    title = "Diferencia Total de Importe por Decil y Canal Conveniente",
+    title = "Diferencia Total de Importe por percentil  y Canal Conveniente - Perc. 91 al 100",
     x = "Diferencia Total de Importe ($)",
-    y = "Decil",
+    y = "Percentil",
     fill = "Canal"
   ) +
   scale_x_continuous(labels = scales::label_dollar(prefix = "$", big.mark = ".", decimal.mark = ",")) +
@@ -602,17 +569,17 @@ grafico_scatter_ordenado <- datos_scatter %>%
              linetype = "dashed",
              size = 1) +
 
-  # Anotación del percentil
-  annotate("text",
-           x = max(datos_scatter$ORDEN) * 0.05,
-           y = percentil_75 * 1.05,
-           label = paste0("Percentil 60: $",
-                         format(round(percentil_98, 2),
-                               big.mark = ",",
-                               decimal.mark = ".")),
-           color = "grey",
-           size = 4,
-           hjust = 0) +
+  # # Anotación del percentil
+  # annotate("text",
+  #          x = max(datos_scatter$ORDEN) * 0.05,
+  #          y = percentil_75 * 1.05,
+  #          label = paste0("Percentil 60: $",
+  #                        format(round(percentil_98, 2),
+  #                              big.mark = ",",
+  #                              decimal.mark = ".")),
+  #          color = "grey",
+  #          size = 4,
+  #          hjust = 0) +
 
   # Escalas y colores
   scale_y_continuous(
@@ -660,3 +627,178 @@ print(grafico_scatter_ordenado)
 
 
 ```
+
+
+ Comparacion de Curvas Optima, curva original y curva con corte  - ultimo decil 
+```{r}
+# de la tabla ultim_mes_farmacia seleccionar variables de famracia, codigo med, mes, cantidad,
+# precio osde unitarios actualizado, precio drogueria actualizado, canal conveniente. SLECCIONANDO EL PRECIO PAGADO OSDE ,esa sEria la curva base.
+# curva optima, TOMAR EL PRECIO SEGUN CANAL CONVENMIENTE
+#  CURVA CORTE, APARTIR DE DECIL 98 TOMAR VALOR UNITARIO DROGUERIA, ANTES FARMACIA
+#  LUEGEGO HACE GRAFICO SCATTER CON PRECIOS UNITARIOS SEGUN CURVA
+
+
+# datos_ultimo_mes <- datos_ultimo_mes %>%  select(DNUM_NUMERO, CODIGO_DEFINITIVO,DNUM_ANOMES_PRESTACION, NUM_CANTIDAD,
+#                              NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT, VALOR_DROGUERIA_MENOR_ACT, 
+#                              CANAL_CONVENIENTE,PERCENTIL) %>% 
+#                       mutate(PRECIO_BASE = NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT,
+#                              PRECIO_OPTIMO = ifelse(CANAL_CONVENIENTE == "DROGUERIA",
+#                                                     VALOR_DROGUERIA_MENOR_ACT,
+#                                                     NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT),
+#                              PRECIO_CORTE = ifelse(PERCENTIL %in% c("P99", "P100"),
+#                                                    VALOR_DROGUERIA_MENOR_ACT,
+#                                                     NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT ) 
+#                              )
+
+# Preparar datos con las 3 variables de precio
+datos_scatter_3precios <- datos_ultimo_mes %>%
+  select(DNUM_NUMERO, CODIGO_DEFINITIVO, DNUM_ANOMES_PRESTACION, NUM_CANTIDAD,
+         NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT, VALOR_DROGUERIA_MENOR_ACT, 
+         CANAL_CONVENIENTE, PERCENTIL) %>% 
+  mutate(
+    PRECIO_BASE = NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT,
+    PRECIO_OPTIMO = ifelse(CANAL_CONVENIENTE == "DROGUERIA",
+                          VALOR_DROGUERIA_MENOR_ACT,
+                          NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT),
+    PRECIO_CORTE = ifelse(PERCENTIL %in% c("P99", "P100"),
+                         VALOR_DROGUERIA_MENOR_ACT,
+                         NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT)
+  ) %>%
+  # Ordenar por PRECIO_BASE (como en tu código original)
+  arrange(PRECIO_BASE) %>%
+  mutate(ORDEN = row_number()) %>%
+  # Transformar a formato largo para ggplot
+  pivot_longer(
+    cols = c(PRECIO_BASE, PRECIO_OPTIMO, PRECIO_CORTE),
+    names_to = "Tipo_Precio",
+    values_to = "Precio"
+  ) %>%
+  mutate(
+    Tipo_Precio = case_when(
+      Tipo_Precio == "PRECIO_BASE" ~ "Precio Base",
+      Tipo_Precio == "PRECIO_OPTIMO" ~ "Precio Óptimo", 
+      Tipo_Precio == "PRECIO_CORTE" ~ "Precio Corte"
+    ),
+    Tipo_Precio = factor(Tipo_Precio, levels = c("Precio Base", "Precio Óptimo", "Precio Corte"))
+  )
+
+# Crear el gráfico comparativo de las 3 curvas
+grafico_3curvas_ordenado <- datos_scatter_3precios %>%
+    ggplot(aes(x = ORDEN, y = Precio, color = Tipo_Precio)) +
+  
+  # Puntos del scatter
+  geom_point(alpha = 0.7, size = 1.2) +
+  # Escalas y colores 
+  scale_y_continuous(
+    labels = dollar_format(prefix = "$", suffix = ""),
+    name = "Precio ($)"
+  ) +
+  
+  scale_x_continuous(
+    name = "Orden (de menor a mayor precio base)",
+    labels = comma_format()
+  ) +
+  
+  scale_color_manual(
+    values = c("Precio Base" = "#fdae61", 
+               "Precio Óptimo" = "#abdda4", 
+               "Precio Corte" = "#2b83ba"),
+    name = "Tipo de Precio"
+  ) +
+  
+  # Tema y títulos
+  labs(
+    title = "Comparación de Curvas de Precios Ordenadas",
+    subtitle = paste0("Análisis de ", 
+                     format(length(unique(datos_scatter_3precios$ORDEN)), big.mark = ","), 
+                     " medicamentos - Precio Base vs Óptimo vs Corte"),
+    caption = "Ordenado por precio base de menor a mayor"
+  ) +
+  
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5),
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 11),
+    legend.position = "bottom",
+    legend.title = element_text(size = 11, face = "bold"),
+    legend.text = element_text(size = 10),
+    panel.grid.minor = element_blank(),
+    legend.key.size = unit(1, "cm")
+  ) +
+  guides(color = guide_legend(
+    override.aes = list(size = 4, alpha = 1, shape = 15),
+    ncol = 3,
+    title.position = "top",
+    title.hjust = 0.5
+  )) +
+  xlim(c(2000, max(datos_scatter_3precios$ORDEN, na.rm = TRUE)))
+
+# Mostrar el gráfico
+print(grafico_3curvas_ordenado)
+```
+ 
+Comparacion escenarios - importes totales 
+```{r}
+
+#  el precio unitario de cada curva multiplicarlo por cantidad y luego hacer grafico 
+datos_barras_precio<- datos_ultimo_mes %>%
+  select(DNUM_NUMERO, CODIGO_DEFINITIVO, DNUM_ANOMES_PRESTACION, NUM_CANTIDAD,
+         NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT, VALOR_DROGUERIA_MENOR_ACT, 
+         CANAL_CONVENIENTE, PERCENTIL) %>% 
+  mutate(
+    PRECIO_BASE = NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT,
+    PRECIO_OPTIMO = ifelse(CANAL_CONVENIENTE == "DROGUERIA",
+                          VALOR_DROGUERIA_MENOR_ACT,
+                          NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT),
+    PRECIO_CORTE = ifelse(PERCENTIL %in% c("P99", "P100"),
+                         VALOR_DROGUERIA_MENOR_ACT,
+                         NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT)
+  ) %>%
+  # Ordenar por PRECIO_BASE (como en tu código original)
+  arrange(PRECIO_BASE) %>%
+  mutate(ORDEN = row_number()
+         ) %>%
+  # Transformar a formato largo para ggplot
+  pivot_longer(
+    cols = c(PRECIO_BASE, PRECIO_OPTIMO, PRECIO_CORTE),
+    names_to = "TIPO_PRECIO",
+    values_to = "PRECIO"
+  ) %>%
+group_by(PERCENTIL, TIPO_PRECIO) %>% 
+      summarise(PRECIO_TOTAL = sum(PRECIO* NUM_CANTIDAD)
+                ) 
+  
+#  asigno ordenr a los percentiles
+datos_barras_precio$PERCENTIL   <- factor(datos_barras_precio$PERCENTIL, 
+                                          levels = paste0("P", 91:100)
+                                        )
+datos_barras_precio %>%   ggplot(aes(x = PRECIO_TOTAL, 
+                             y = PERCENTIL, 
+                             fill = TIPO_PRECIO)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Diferencia Total de Importe por percentil  y Tipo Precio  - Perc. 91 al 100",
+    x = "Diferencia Total de Importe ($)",
+    y = "Percentil",
+    fill = "Tipo Precio"
+  ) +
+  scale_x_continuous(labels = scales::label_dollar(prefix = "$", big.mark = ".", decimal.mark = ",")) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    legend.title = element_text(face = "bold")
+  )
+
+
+
+
+
+
+
+```
+ 
+
