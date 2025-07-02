@@ -774,13 +774,15 @@ group_by(PERCENTIL, TIPO_PRECIO) %>%
 datos_barras_precio$PERCENTIL   <- factor(datos_barras_precio$PERCENTIL, 
                                           levels = paste0("P", 91:100)
                                         )
+
+# Grafico Barras
 datos_barras_precio %>%   ggplot(aes(x = PRECIO_TOTAL, 
                              y = PERCENTIL, 
                              fill = TIPO_PRECIO)) +
   geom_col(position = "dodge") +
   labs(
-    title = "Diferencia Total de Importe por percentil  y Tipo Precio  - Perc. 91 al 100",
-    x = "Diferencia Total de Importe ($)",
+    title = "Total de Importe por percentil  y Tipo Precio  - Perc. 91 al 100",
+    x = "Total de Importe ($)",
     y = "Percentil",
     fill = "Tipo Precio"
   ) +
