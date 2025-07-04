@@ -855,15 +855,33 @@ umbral_optimo <- function(df){
 # Cambiar a UTF-8 para todos los aspectos del entorno
 invisible(Sys.setlocale("LC_ALL", "en_US.UTF-8"))
 
+# para cada medicamento, busco el ultimo mes y para ese ultimo mes me quedo con el precio unitario de farmacia y el precio unitario de drogueria
+precios_ultimo_mes <- df_med %>% 
+                        dplyr::group_by(CODIGO_DEFINITIVO) %>% 
+                        dplyr::mutate(Ultimo_Mes = max(DNUM_ANOMES_PRESTACION)) %>% 
+                        dplyr::ungroup() %>% 
+                        dplyr::filter(DNUM_ANOMES_PRESTACION == Ultimo_Mes) %>% 
+                        dplyr::distinct(CODIGO_DEFINITIVO,
+                                        NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT,
+                                        VALOR_DROGUERIA_MENOR_ACT) %>% 
+                        dplyr::rename(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT_ultimo_mes = NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT,
+                                      VALOR_DROGUERIA_MENOR_ACT_ultimo_mes = VALOR_DROGUERIA_MENOR_ACT)
+
 # filtramos las órdenes que cuentan con valor MAC, es decir el valor de compra a través de Droguería
+# traigo los precios unitarios de farmacia y drogueria del ultimo mes y lo pego en todos los meses
 df_med_MAC <- df_med %>% 
-          dplyr::filter(ESTA_EN_MAC == 1)
+          dplyr::filter(ESTA_EN_MAC == 1) %>% 
+          dplyr::left_join(y = precios_ultimo_mes) %>% 
+          dplyr::mutate(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT = NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT_ultimo_mes,
+                        VALOR_DROGUERIA_MENOR_ACT = VALOR_DROGUERIA_MENOR_ACT_ultimo_mes)
 
 tic()
+# Calculo el umbral optimo, mediante la funcion
 data_umbral_optimo <- umbral_optimo(df = df_med_MAC)
 
 toc()
 
+# pego el umbral optimo en el dataframe y calculo: total de la linea segun el umbral y total segun canal conbeniente
 df_med_MAC <- df_med_MAC %>% 
       dplyr::mutate(Umbral = data_umbral_optimo$umbral_optimo,
                     CostoTotal_Umbral = ifelse(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT<=Umbral,
