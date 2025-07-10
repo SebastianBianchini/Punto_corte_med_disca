@@ -803,19 +803,29 @@ datos_barras_precio %>%   ggplot(aes(x = PRECIO_TOTAL,
 
 ```
  
+ 
+ Buscamos el punto de corte óptimo, recorriendo por cada uno de los precios unitarios únicos de menor a mayor. 
+ 
+ En este caso, antes de buscar el punto de corte óptimo, buscamos el precio unitario de cada medicamento en el último mes que aparece y lo usamos para reemplazar en todos los meses anterior. Para todos los cálculos se utilizar el precio unitario del último mes replicado en todos los meses. Asumimos que el precio unitario a valores actualizados al último mes, debería ser el mismo a lo largo de todo el período. Como existen 4 farmacias de provisión, tomamos el valor máximo, asumiendo un escenario conservador. 
+ 
 
 ```{r}
 # con esta funcion, calculamos el umbral optimo, recorriendo cada uno de los umbrales posibles (precios unicos)
-# recibe como parametro un dataframe que debe contar con las columnas NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT, VALOR_DROGUERIA_MENOR_ACT y NUM_CANTIDAD  
-umbral_optimo <- function(df){
+# recibe como parametro un dataframe (df) que debe contar con las columnas NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT, VALOR_DROGUERIA_MENOR_ACT y NUM_CANTIDAD  
+# y un vector de precios unitarios unicos (precios_unicos)
+umbral_optimo <- function(df,precios_unicos = NULL){
   
-  # defino el listado de precios de forma ordenada para ir recorriendolos y calculando el costo total
-  precios_unicos <- sort(unique(df$NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT))
+  # se espera como parametro el vector de precios unitarios unicos a recorrer
+  # si no viene, tomamos los valores únicos del dataframe
+  if (is.null(precios_unicos)) {
+    # defino el listado de precios de forma ordenada para ir recorriendolos y calculando el costo total
+    precios_unicos <- sort(unique(df$NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT))
+  }
   
   # defino un valor inicial de costo total minimo grande que luego se ira actualizando
   # como valor inicial todo el total * 1000000
   costo_total_min <- sum(df$NUM_IMPORTE_PAGO_OSDE_ACT)*1000000
-  
+  costo_total_vector <- c()
   # recorro todos los precios unicos
   for (precio_unico in precios_unicos) {
     
@@ -837,7 +847,12 @@ umbral_optimo <- function(df){
       indice_umbral <- which(precios_unicos == umbral)
     }
     
+    costo_total_vector <- c(costo_total_vector,costo_total_umbral)
+    
+    cat("\nPrecio unitario",which(precios_unicos == precio_unico),":",precio_unico," - Costo Total: $",round(costo_total_umbral),"\n")
   }
+  
+  
   
   # devuelvo una lista con 4 elementos:
   # 1) Indice del umbral optimo dentro del listado de precios unicos ordenados de menor a mayor
@@ -848,6 +863,7 @@ umbral_optimo <- function(df){
   lista_return$umbral_optimo <- umbral
   lista_return$costo_total_optimo <- costo_total_min
   lista_return$precios_unicos <- precios_unicos
+  lista_return$costos_totales <- costo_total_vector
   
   return(lista_return)
 }
