@@ -805,19 +805,29 @@ datos_barras_precio %>%   ggplot(aes(x = PRECIO_TOTAL,
 
 ```
  
+ 
+ Buscamos el punto de corte óptimo, recorriendo por cada uno de los precios unitarios únicos de menor a mayor. Se trabaja sólo con órdenes cuyo precio este en MAC debido a que en esos casos contamos con precio de droguería, lo cual hace posible la comparación.
+ 
+ En este caso, antes de buscar el punto de corte óptimo, buscamos el precio unitario de cada medicamento, tanto de farmacia como de droguería, en el último mes que aparece y lo usamos para reemplazar en todos los meses anterior. Para todos los cálculos se utilizar el precio unitario del último mes replicado en todos los meses. Asumimos que el precio unitario a valores actualizados al último mes, debería ser el mismo a lo largo de todo el período. Como existen 4 farmacias de provisión, tomamos el valor máximo, asumiendo un escenario conservador. 
+ 
 
 ```{r}
 # con esta funcion, calculamos el umbral optimo, recorriendo cada uno de los umbrales posibles (precios unicos)
-# recibe como parametro un dataframe que debe contar con las columnas NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT, VALOR_DROGUERIA_MENOR_ACT y NUM_CANTIDAD  
-umbral_optimo <- function(df){
+# recibe como parametro un dataframe (df) que debe contar con las columnas NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT, VALOR_DROGUERIA_MENOR_ACT y NUM_CANTIDAD  
+# y un vector de precios unitarios unicos (precios_unicos)
+umbral_optimo <- function(df,precios_unicos = NULL){
   
-  # defino el listado de precios de forma ordenada para ir recorriendolos y calculando el costo total
-  precios_unicos <- sort(unique(df$NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT))
+  # se espera como parametro el vector de precios unitarios unicos a recorrer
+  # si no viene, tomamos los valores únicos del dataframe
+  if (is.null(precios_unicos)) {
+    # defino el listado de precios de forma ordenada para ir recorriendolos y calculando el costo total
+    precios_unicos <- sort(unique(df$NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT))
+  }
   
   # defino un valor inicial de costo total minimo grande que luego se ira actualizando
   # como valor inicial todo el total * 1000000
   costo_total_min <- sum(df$NUM_IMPORTE_PAGO_OSDE_ACT)*1000000
-  
+  costo_total_vector <- c()
   # recorro todos los precios unicos
   for (precio_unico in precios_unicos) {
     
@@ -839,7 +849,12 @@ umbral_optimo <- function(df){
       indice_umbral <- which(precios_unicos == umbral)
     }
     
+    costo_total_vector <- c(costo_total_vector,costo_total_umbral)
+    
+    cat("\nPrecio unitario",which(precios_unicos == precio_unico),":",precio_unico," - Costo Total: $",round(costo_total_umbral),"\n")
   }
+  
+  
   
   # devuelvo una lista con 4 elementos:
   # 1) Indice del umbral optimo dentro del listado de precios unicos ordenados de menor a mayor
@@ -850,6 +865,7 @@ umbral_optimo <- function(df){
   lista_return$umbral_optimo <- umbral
   lista_return$costo_total_optimo <- costo_total_min
   lista_return$precios_unicos <- precios_unicos
+  lista_return$costos_totales <- costo_total_vector
   
   return(lista_return)
 }
@@ -912,11 +928,28 @@ data_barplot %>%
             color = "black",
             size = 3.5) +
   labs(title = "Costo Total según Canal elegido",
-         subtitle = paste0("Umbral = $",round(data_umbral_optimo$umbral_optimo,2)),
+         subtitle = paste0("Umbral = $",format(round(data_umbral_optimo$umbral_optimo), 
+                                           big.mark = ".", 
+                                           decimal.mark = ",")),
          x = NULL,
          y = "Costo Total",
          fill = NULL) +
   scale_y_continuous(labels = label_dollar(prefix = "$", big.mark = ".", decimal.mark = ","))
+
+# Calculamos cantidad de socios y cantidad de medicamentos en cada parte del umbral y además cuantos socios y cuantos medicamentos están al mismo tiempo por encima y por debajo en el mismo mes
+df_med_MAC %>% 
+  dplyr::mutate(Marca_Umbral = ifelse(NUM_IMPORTE_PAGO_OSDE_UNITARIO_ACT<=Umbral,"Menor al Umbral","Mayor al Umbral")) %>% 
+  dplyr::group_by(DNUM_ANOMES_PRESTACION,DNUM_IC) %>% 
+  dplyr::mutate(IC_En_Ambos = n_distinct(Marca_Umbral)) %>%
+  dplyr::ungroup() %>%  
+  dplyr::group_by(DNUM_ANOMES_PRESTACION,CODIGO_DEFINITIVO) %>% 
+  dplyr::mutate(MED_En_Ambos = n_distinct(Marca_Umbral)) %>%
+  dplyr::ungroup() %>% 
+  dplyr::group_by(Marca_Umbral) %>% 
+  dplyr::summarise(Cant_ICs = n_distinct(DNUM_IC),
+                   Cant_ICs_En_Ambos = n_distinct(DNUM_IC[IC_En_Ambos>=2]),
+                   Cant_Medicamentos = n_distinct(CODIGO_DEFINITIVO),
+                   Cant_Medicamentos_En_Ambos = n_distinct(CODIGO_DEFINITIVO[MED_En_Ambos>=2]))
 
 
 # data para serie de tiempo mensual
@@ -933,7 +966,9 @@ data_serie_tiempo %>%
   ggplot(aes(x = DNUM_ANOMES_PRESTACION, y = Importe, color = Serie, group = Serie)) +
     geom_line(size = 1) +
     labs(title = "Serie Tiempo - Costo Total según Canal elegido",
-         subtitle = paste0("Umbral = $",round(data_umbral_optimo$umbral_optimo,2)),
+         subtitle = paste0("Umbral = $",format(round(data_umbral_optimo$umbral_optimo), 
+                                           big.mark = ".", 
+                                           decimal.mark = ",")),
          x = "Año-Mes",
          y = "Costo Total",
          color = "Serie") +
@@ -944,4 +979,10 @@ data_serie_tiempo %>%
 
 
 ```
+
+
+
+
+
+
 
