@@ -60,13 +60,20 @@ data<- data %>% mutate(VALOR_DROGUERIA_MENOR = if_else(ESTA_EN_MAC == "NO EN MAC
 
 
 
-
+Cargamos Base de trabajo - Precio
 ```{r}
 
+data_precio <- read_excel("data/Base_para_simulacion_202505_Medicamentos.xlsx")
+data_precio <- clean_names(data_precio)
+names(data_precio) <- toupper(names(data_precio))
+head(data_precio)
+summary(data_precio)
 
 
 
-
+```
+JOIN ENTRE BASES PARA TOMAR EL PRECIO POR FARMACIA Y MED
+```{r}
 
 ```
 
